@@ -4,6 +4,10 @@
 
 It efficiently processes images in parallel, allowing you to quickly convert large numbers of files to your preferred format (e.g., PNG, JPEG) and save them to your chosen destination.
 
+## Performance
+
+In a test, **rico** converted 1,569 images to PNG on an M1 Max MacBook Pro in just 1.7 seconds, highlighting its parallel processing power.
+
 ### Features
 
 - Convert images to common formats: PNG, JPEG, BMP.
