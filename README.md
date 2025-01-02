@@ -17,18 +17,36 @@ In a test, **rico** converted 1,569 images to PNG on an M1 Max MacBook Pro in ju
 - Automatically creates output directories if it doesn't exist.
 - **Available for download via GitHub releases** (no need to build if you prefer not to).
 
-### Development
+### Installation
+
+#### Option 1: Install via curl
+
+You can quickly install Rico by running the following command in your terminal:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/ranajahanzaib/rico/main/install_rico.sh | sudo bash
+```
+
+This command will:
+
+1. Download the latest version of Rico from the repository.
+2. Build the release version using Cargo.
+3. Move the rico binary to /usr/local/bin so it can be accessed system-wide.
+
+**Note**: Ensure you have sudo privileges as the script moves the binary to a system directory.
+
+#### Option 2: Build from Source
 
 To build **rico**, you'll need to have Rust installed on your machine. If you don't have Rust yet, you can install it from [https://www.rust-lang.org/](https://www.rust-lang.org/).
 
-#### 1. Clone the repository
+##### 1. Clone the repository
 
 ```sh
 git clone https://github.com/ranajahanzaib/rico.git
 cd rico
 ```
 
-#### 2. Build the project
+##### 2. Build the project
 
 Build the project using Cargo, Rust's package manager.
 
@@ -38,13 +56,13 @@ cargo build --release
 
 The compiled binary can be found in the "target/release" directory.
 
-#### 3. Run the converter
+##### 3. Run the converter
 
-Run the image converter using this command:
+Move the binary to a directory in your PATH (e.g., /usr/local/bin):
 
 ```sh
-cd target/release
-./rico -s /path/to/source -o /path/to/output -f png
+sudo mv target/release/rico /usr/local/bin/
+rico -s /path/to/source -o /path/to/output -f png
 ```
 
 **Alternatively, download the latest release from the GitHub releases page.**
