@@ -61,6 +61,7 @@ fn convert_image(input_path: &Path, output_dir: &Path, target_format: &str) -> R
         "png" => ImageFormat::Png,
         "jpg" | "jpeg" => ImageFormat::Jpeg,
         "bmp" => ImageFormat::Bmp,
+        "webp" => ImageFormat::WebP,
         _ => return Err(format!("Unsupported format: {}", target_format).into()), // Error for unsupported target formats
     };
 
@@ -143,7 +144,7 @@ fn main() {
                 .long("format")
                 .value_parser(value_parser!(String))
                 .default_value("png")
-                .help("Target format for conversion (e.g., png, jpg, bmp)"), // The target format (default is PNG)
+                .help("Target format for conversion (e.g., png, jpg, bmp, webp)"), // The target format (default is PNG)
         )
         .get_matches();
 
