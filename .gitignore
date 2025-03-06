@@ -1,3 +1,7 @@
 /target
 .DS_Store
 _images_/
+converted/
+bg-removed/
+cdn/
+new-cdn/

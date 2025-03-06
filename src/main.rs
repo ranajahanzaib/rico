@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::fs;
 use std::sync::Mutex;
@@ -5,7 +6,7 @@ use std::io::Read;
 use rayon::prelude::*;
 use walkdir::WalkDir;
 use image::{io::Reader as ImageReader, ImageFormat, DynamicImage, Rgba, RgbaImage};
-use clap::{Command, Arg, value_parser};
+use clap::{Arg, ArgAction, Command};
 
 fn collect_image_files(source_dir: &Path) -> Vec<PathBuf> {
     let mut image_files = Vec::new();
@@ -145,22 +146,80 @@ fn process_images(source_dir: &Path, output_dir: &Path, target_format: &str) -> 
     Ok(())
 }
 
-/// Removes a near-white background by making it transparent.
-fn remove_background(img: &DynamicImage) -> RgbaImage {
-    let img = img.to_rgba8(); // Convert image to RGBA format
+/// Checks if two pixels are significantly different (i.e., an edge)
+fn is_edge(p1: Rgba<u8>, p2: Rgba<u8>, edge_threshold: u8) -> bool {
+    let diff_r = p1[0].abs_diff(p2[0]);
+    let diff_g = p1[1].abs_diff(p2[1]);
+    let diff_b = p1[2].abs_diff(p2[2]);
+
+    diff_r > edge_threshold || diff_g > edge_threshold || diff_b > edge_threshold
+}
+
+/// Removes only the outer near-white background, stopping at edges.
+fn remove_background(img: &DynamicImage, edge_threshold: u8) -> RgbaImage {
+    let img = img.to_rgba8();
     let (width, height) = img.dimensions();
-    let mut output = RgbaImage::new(width, height);
+    let mut output = img.clone();
+    let mut visited = vec![vec![false; width as usize]; height as usize];
+    let mut queue = VecDeque::new();
 
-    for y in 0..height {
-        for x in 0..width {
-            let pixel = img.get_pixel(x, y);
-            let [r, g, b, a] = pixel.0;
+    // Initialize BFS with border pixels
+    for x in 0..width {
+        queue.push_back((x, 0));
+        queue.push_back((x, height - 1));
+    }
+    for y in 1..height - 1 {
+        queue.push_back((0, y));
+        queue.push_back((width - 1, y));
+    }
 
-            // If the pixel is nearly white, make it transparent
-            if r > 240 && g > 240 && b > 240 {
-                output.put_pixel(x, y, Rgba([0, 0, 0, 0])); // Fully transparent
-            } else {
-                output.put_pixel(x, y, Rgba([r, g, b, a])); // Keep original pixel
+    while let Some((x, y)) = queue.pop_front() {
+        if x >= width || y >= height || visited[y as usize][x as usize] {
+            continue;
+        }
+        visited[y as usize][x as usize] = true;
+
+        let pixel = img.get_pixel(x, y);
+        let [r, g, b, _] = pixel.0;
+
+        // If pixel is near white and not an edge, continue flood-fill
+        if r > 240 && g > 240 && b > 240 {
+            let mut is_surrounded_by_edges = false;
+
+            // Check neighboring pixels for strong edges
+            if x > 0 && is_edge(*pixel, img.get_pixel(x - 1, y).clone(), edge_threshold) {
+                is_surrounded_by_edges = true;
+            }
+            if x + 1 < width && is_edge(*pixel, img.get_pixel(x + 1, y).clone(), edge_threshold) {
+                is_surrounded_by_edges = true;
+            }
+            if y > 0 && is_edge(*pixel, img.get_pixel(x, y - 1).clone(), edge_threshold) {
+                is_surrounded_by_edges = true;
+            }
+            if y + 1 < height && is_edge(*pixel, img.get_pixel(x, y + 1).clone(), edge_threshold) {
+                is_surrounded_by_edges = true;
+            }
+
+            // If an edge is nearby, stop removing
+            if is_surrounded_by_edges {
+                continue;
+            }
+
+            // Make background transparent
+            output.put_pixel(x, y, Rgba([0, 0, 0, 0]));
+
+            // Add neighboring pixels
+            if x > 0 {
+                queue.push_back((x - 1, y));
+            }
+            if x + 1 < width {
+                queue.push_back((x + 1, y));
+            }
+            if y > 0 {
+                queue.push_back((x, y - 1));
+            }
+            if y + 1 < height {
+                queue.push_back((x, y + 1));
             }
         }
     }
@@ -168,7 +227,7 @@ fn remove_background(img: &DynamicImage) -> RgbaImage {
     output
 }
 
-fn remove_bg_from_images(source_dir: &Path, output_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
+fn remove_bg_from_images(source_dir: &Path, output_dir: &Path, edge_threshold: u8) -> Result<(), Box<dyn std::error::Error>> {
     if !source_dir.exists() || !source_dir.is_dir() {
         return Err("Source directory does not exist or is not a directory".into());
     }
@@ -192,7 +251,7 @@ fn remove_bg_from_images(source_dir: &Path, output_dir: &Path) -> Result<(), Box
             }
         };
 
-        let processed_img = remove_background(&img);
+        let processed_img = remove_background(&img, edge_threshold);
 
         // Get relative path from the source directory
         let relative_path = input_path.strip_prefix(source_dir).unwrap();
@@ -218,20 +277,28 @@ fn remove_bg_from_images(source_dir: &Path, output_dir: &Path) -> Result<(), Box
 
     Ok(())
 }
+
 fn main() {
     // CLI argument parsing with clap
     let matches = Command::new("RICO - Rust Image Converter")
-        .version("0.1")
+        .version("1.0")
         .author("Rana Jahanzaib <work@withrana.com>")
         .about("RICO is a Rust-powered CLI tool for rapid, parallel image conversion.")
         .subcommand(
-            Command::new("remove-bg")
+            Command::new("remove")
                 .about("Remove background from images")
+                .arg(
+                    Arg::new("background")
+                        .short('b')
+                        .long("background")
+                        .action(ArgAction::SetTrue) // Flag without a value
+                        .help("Remove background from images"),
+                )
                 .arg(
                     Arg::new("source")
                         .short('s')
                         .long("source")
-                        .value_parser(value_parser!(String))
+                        .value_parser(clap::value_parser!(String))
                         .required(true)
                         .help("Source directory for input images"),
                 )
@@ -239,8 +306,16 @@ fn main() {
                     Arg::new("output")
                         .short('o')
                         .long("output")
-                        .value_parser(value_parser!(String))
+                        .value_parser(clap::value_parser!(String))
                         .help("Output directory for processed images (optional, defaults to source directory)"),
+                )
+                .arg(
+                    Arg::new("edge-threshold")
+                        .short('e')
+                        .long("edge-threshold")
+                        .value_parser(clap::value_parser!(u8))
+                        .default_value("30")
+                        .help("Set the edge detection threshold (default: 30)"),
                 ),
         )
         .subcommand(
@@ -250,7 +325,7 @@ fn main() {
                     Arg::new("source")
                         .short('s')
                         .long("source")
-                        .value_parser(value_parser!(String))
+                        .value_parser(clap::value_parser!(String))
                         .required(true)
                         .help("Source directory for input images"),
                 )
@@ -258,28 +333,29 @@ fn main() {
                     Arg::new("output")
                         .short('o')
                         .long("output")
-                        .value_parser(value_parser!(String))
+                        .value_parser(clap::value_parser!(String))
                         .help("Output directory for converted images (optional, defaults to source directory)"),
                 )
                 .arg(
                     Arg::new("format")
                         .short('f')
                         .long("format")
-                        .value_parser(value_parser!(String))
+                        .value_parser(clap::value_parser!(String))
                         .default_value("png")
                         .help("Target format for conversion (e.g., png, jpg, bmp, webp)"),
                 ),
         )
         .get_matches();
 
-
-        // Handle the "remove-bg" subcommand
-    if let Some(remove_bg_matches) = matches.subcommand_matches("remove-bg") {
-        let source_dir = Path::new(remove_bg_matches.get_one::<String>("source").unwrap());
-        let output_dir = remove_bg_matches
+    // Handle "remove" command
+    if let Some(remove_matches) = matches.subcommand_matches("remove") {
+        let remove_bg = remove_matches.get_flag("background");
+        let source_dir = Path::new(remove_matches.get_one::<String>("source").unwrap());
+        let output_dir = remove_matches
             .get_one::<String>("output")
             .map(Path::new)
             .unwrap_or(source_dir);
+        let edge_threshold: u8 = *remove_matches.get_one::<u8>("edge-threshold").unwrap_or(&30);
 
         if !source_dir.exists() || !source_dir.is_dir() {
             eprintln!("Source directory does not exist or is not a directory");
@@ -290,16 +366,18 @@ fn main() {
             fs::create_dir_all(output_dir).expect("Failed to create output directory");
         }
 
-        if let Err(e) = remove_bg_from_images(source_dir, output_dir) {
-            eprintln!("Error removing background: {}", e);
-        } else {
-            println!("Background removal completed.");
+        if remove_bg {
+            if let Err(e) = remove_bg_from_images(source_dir, output_dir, edge_threshold) {
+                eprintln!("Error removing background: {}", e);
+            } else {
+                println!("Background removal completed.");
+            }
         }
 
         return;
     }
 
-    // Handle the "convert" subcommand
+    // Handle "convert" command
     if let Some(convert_matches) = matches.subcommand_matches("convert") {
         let source_dir = Path::new(convert_matches.get_one::<String>("source").unwrap());
         let output_dir = convert_matches
@@ -325,6 +403,7 @@ fn main() {
 
         return;
     }
+
 
     // Extract command-line arguments
     let source_dir = Path::new(matches.get_one::<String>("source").unwrap());
