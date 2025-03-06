@@ -6,7 +6,7 @@ It efficiently processes images in parallel, allowing you to quickly convert lar
 
 ## Performance
 
-Unbelievably fast: RICO removed the background from 5,740 images in under 5 seconds and converted 5,740 images to PNG in ~1 second on an M1 Max MacBook Pro, showcasing its extraordinary parallel processing power.
+Unbelievably fast: RICO removed the background from 5,740 images in under 5 seconds and converted 5,740 images to WebP in ~1 second on an M1 Max MacBook Pro, showcasing its extraordinary parallel processing power.
 
 ## Features
 
