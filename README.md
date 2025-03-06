@@ -1,25 +1,25 @@
 # rico
 
-**rico** is a Rust-powered CLI tool for rapid, parallel image conversion.
+RICO is the fastest, Rust-powered CLI tool designed for bulk image conversion and background removal.
 
-It efficiently processes images in parallel, allowing you to quickly convert large numbers of files to your preferred format (e.g., PNG, JPEG) and save them to your chosen destination.
+It efficiently processes images in parallel, allowing you to quickly convert large numbers of files to your preferred format (e.g., PNG, JPEG) or remove backgrounds from thousands of images with ease.
 
 ## Performance
 
-In a test, **rico** converted 1,569 images to PNG on an M1 Max MacBook Pro in just 1.7 seconds, highlighting its parallel processing power.
+Unbelievably fast: RICO removed the background from 5,740 images in under 5 seconds and converted 5,740 images to PNG in ~1 second on an M1 Max MacBook Pro, showcasing its extraordinary parallel processing power.
 
-### Features
+## Features
 
-- Convert images to common formats: PNG, JPEG, BMP.
-- Skips unsupported formats (e.g., SVG) and files that cannot be decoded (yet).
-- Parallel processing for faster conversions.
-- Easy-to-use CLI interface.
-- Automatically creates output directories if it doesn't exist.
-- **Available for download via GitHub releases** (no need to build if you prefer not to).
+- Convert images to PNG, JPEG, BMP, WEBP.
+- Remove backgrounds from images using fast edge detection.
+- Parallel processing for high-speed performance.
+- Skips unsupported formats (e.g., SVG) automatically.
+- Lightweight and efficient Rust-powered CLI.
+- Automatically creates output directories if they don’t exist.
 
-### Installation
+## Installation
 
-#### Option 1: Install via curl
+#### Quick Install
 
 You can quickly install Rico by running the following command in your terminal:
 
@@ -29,91 +29,154 @@ curl -fsSL https://raw.githubusercontent.com/ranajahanzaib/rico/main/install_ric
 
 This command will:
 
-1. Download the latest version of Rico from the repository.
+1. Download the latest version of Rico.
 2. Build the release version using Cargo.
-3. Move the rico binary to /usr/local/bin so it can be accessed system-wide.
+3. Move the rico binary to `/usr/local/bin` for system-wide access.
 
-**Note**: Ensure you have sudo privileges as the script moves the binary to a system directory.
+Note: Ensure you have sudo privileges as the script moves the binary to a system directory.
 
-#### Option 2: Build from Source
+#### Build from Source
 
-To build **rico**, you'll need to have Rust installed on your machine. If you don't have Rust yet, you can install it from [https://www.rust-lang.org/](https://www.rust-lang.org/).
+To build rico, you’ll need Rust installed. If you don’t have Rust, install it from https://www.rust-lang.org/.
 
-##### 1. Clone the repository
+##### 1. Clone the Repository
 
 ```sh
 git clone https://github.com/ranajahanzaib/rico.git
 cd rico
 ```
 
-##### 2. Build the project
-
-Build the project using Cargo, Rust's package manager.
+##### 2. Build the Project
 
 ```sh
 cargo build --release
 ```
 
-The compiled binary can be found in the "target/release" directory.
+The compiled binary will be in the target/release directory.
 
-##### 3. Run the converter
-
-Move the binary to a directory in your PATH (e.g., /usr/local/bin):
+##### 3. Move the Binary to Your PATH
 
 ```sh
 sudo mv target/release/rico /usr/local/bin/
-rico -s /path/to/source -o /path/to/output -f png
 ```
 
-**Alternatively, download the latest release from the GitHub releases page.**
+##### 4. Verify Installation
+
+```sh
+rico --version
+```
 
 ## Usage
 
-The utility accepts the following command-line arguments:
+The rico CLI provides two main commands: **convert** and **remove**.
 
 ```sh
-rico 0.1
+rico 1.0
 RICO is a Rust-powered CLI tool for rapid, parallel image conversion.
 
 USAGE:
-rico [OPTIONS]
+rico <SUBCOMMAND> [OPTIONS]
+
+SUBCOMMANDS:
+remove  Remove background from images
+convert Convert images to different formats
+help    Print this help message
 
 OPTIONS:
--f, --format <format> # Target format for conversion (e.g., png, jpg, bmp) [default: png]
--o, --output <output> # Output directory for converted images (optional, defaults to source directory)
--s, --source <source> # Source directory for input images (required)
 -h, --help Print help information
 -V, --version Print version information
-
-Arguments
-• –source (-s): # The source directory containing the images you want to convert (required).
-• –output (-o): # The output directory where the converted images will be saved (optional, defaults to the source directory).
-• –format (-f): # The target format for the conversion (e.g., png, jpg, bmp). The default format is png.
 ```
 
-#### Example
+### 1. Converting Images to a Different Format
 
-Convert all images in the ./images directory to JPG format and save them in the ./converted directory:
+To convert images in a folder to another format:
 
 ```sh
-./rico -s ./images -o ./converted -f jpg
+rico convert -s images/ -o converted/ -f jpg
+
+Options for convert command:
+
+-s, --source <source> Source directory for input images (required)
+-o, --output <output> Output directory for converted images (optional, defaults to source directory)
+-f, --format <format> Target format (png, jpg, bmp, webp) [default: png]
 ```
 
-#### Parallel Processing
+#### Example Usage:
 
-RICO utilizes the Rayon crate to process images concurrently, leading to significantly faster conversion times, especially with numerous files.
+Convert all images in **images/** to WEBP and save them in **converted/**:
 
-##### Supported Formats
+```sh
+rico convert -s images/ -o converted/ -f webp
+```
 
-- **Input**: PNG, JPEG, BMP
-- **Output**: PNG, JPEG, BMP
+Convert images in-place:
 
-**Unsupported formats (e.g., SVG) will be skipped automatically.**
+```sh
+rico convert -s images/ -f webp
+```
 
-### Contributing
+### 1. Removing Backgrounds from Images
 
-We love contributions! Submit a pull request or open an issue. Kindly, follow the Rust style guide and write tests where appropriate.
+To remove backgrounds from images:
 
-### License
+```sh
+rico remove -s images/ -o processed/ --background
 
-This project is freely available under the MIT License. Use, modify, and distribute it as you wish. See LICENSE for the full terms.
+Options for remove command:
+
+-s, --source <source> Source directory for input images (required)
+-o, --output <output> Output directory for processed images (optional, defaults to source directory)
+-b, --background Enable background removal
+-e, --edge-threshold <value> Set the edge detection threshold (default: 30)
+
+```
+
+#### Example Usage:
+
+Remove backgrounds from all images in images/ and save to processed/:
+
+```sh
+rico remove -s images/ -o processed/ -b
+```
+
+Remove backgrounds with a custom edge threshold:
+
+```sh
+rico remove -s images/ -o processed/ -b -e 40
+```
+
+### Supported Formats
+
+#### Input Formats:
+
+- PNG
+- JPEG
+- BMP
+- WEBP
+
+#### Output Formats (for convert command):
+
+- PNG
+- JPEG
+- BMP
+- WEBP
+
+###### Unsupported formats (e.g., SVG) are automatically skipped.
+
+## Contributing
+
+We welcome contributions! Feel free to submit pull requests or open issues.
+
+- Follow Rust’s style guide.
+- Write tests where appropriate.
+- Optimize performance where possible.
+
+## License
+
+This project is licensed under the MIT License. See [LICENSE](./LICENSE) for details.
+
+## 🚀 Start Using Rico Today!
+
+```sh
+rico convert -s images/ -o converted/ -f webp
+```

@@ -1,10 +1,11 @@
 [package]
 name = "rico"
-version = "0.1.1"
+version = "1.0.0"
 edition = "2021"
 
 [dependencies]
 walkdir = "2.3"
 image = "0.24"
 rayon = "1.7"
+imageproc = "0.23"
 clap = { version = "4.3", features = ["derive"] }
