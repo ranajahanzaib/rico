@@ -118,14 +118,8 @@ fn process_images(
     output_dir: &Path,
     target_format: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    // Read the contents of the source directory.
-    let entries: Vec<_> = fs::read_dir(source_dir)?.collect();
-    // Check if the source directory is empty.
-    if entries.is_empty() {
-        // If empty, print a message and return Ok.
-        println!("No images found in the source directory.");
-        return Ok(());
-    }
+    // Mutex is used to safely share the file list among threads.
+    // Initialize a Mutex-protected vector to store the paths of files to be processed.
 
     // Mutex is used to safely share the file list among threads.
     // Initialize a Mutex-protected vector to store the paths of files to be processed.
