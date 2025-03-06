@@ -173,7 +173,7 @@ We welcome contributions! Feel free to submit pull requests or open issues.
 
 ## License
 
-This project is licensed under the MIT License. See LICENSE for details.
+This project is licensed under the MIT License. See [LICENSE](./LICENSE) for details.
 
 ## 🚀 Start Using Rico Today!
 
