@@ -1,21 +1,18 @@
-use std::collections::VecDeque;
-use std::path::{Path, PathBuf};
-use std::fs;
-use std::sync::Mutex;
-use std::io::Read;
-use rayon::prelude::*;
-use walkdir::WalkDir;
-use image::{io::Reader as ImageReader, ImageFormat, DynamicImage, Rgba, RgbaImage};
 use clap::{Arg, ArgAction, Command};
+use image::{io::Reader as ImageReader, DynamicImage, ImageFormat, Rgba, RgbaImage};
+use rayon::prelude::*;
+use std::collections::VecDeque;
+use std::fs;
+use std::io::Read;
+use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+use walkdir::WalkDir;
 
 fn collect_image_files(source_dir: &Path) -> Vec<PathBuf> {
     let mut image_files = Vec::new();
     let allowed_extensions = ["jpg", "jpeg", "png", "gif", "bmp", "webp", "tiff"];
 
-    for entry in WalkDir::new(source_dir)
-        .into_iter()
-        .filter_map(Result::ok)
-    {
+    for entry in WalkDir::new(source_dir).into_iter().filter_map(Result::ok) {
         let path = entry.path();
         if path.is_file() {
             if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
@@ -31,13 +28,17 @@ fn collect_image_files(source_dir: &Path) -> Vec<PathBuf> {
 
 /// Converts an image from its current format to a target format (e.g., PNG, JPEG, BMP).
 /// This function will skip unsupported formats and files that cannot be decoded.
-fn convert_image(input_path: &Path, output_dir: &Path, target_format: &str) -> Result<(), Box<dyn std::error::Error>> {
+fn convert_image(
+    input_path: &Path,
+    output_dir: &Path,
+    target_format: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
     // Skip unsupported formats, such as SVG (image::guess_format will return an error for it)
     if let Some(ext) = input_path.extension() {
         let ext = ext.to_str().unwrap_or("").to_lowercase();
         if ext == "svg" {
             println!("Skipping SVG file: {:?}", input_path);
-            return Ok(());  // Skip SVG files, as they're not supported
+            return Ok(()); // Skip SVG files, as they're not supported
         }
     }
 
@@ -48,9 +49,12 @@ fn convert_image(input_path: &Path, output_dir: &Path, target_format: &str) -> R
     let format = image::guess_format(&buffer)?;
 
     // If the format is unsupported, skip the file
-    if !matches!(format, ImageFormat::Png | ImageFormat::Jpeg | ImageFormat::Bmp) {
+    if !matches!(
+        format,
+        ImageFormat::Png | ImageFormat::Jpeg | ImageFormat::Bmp
+    ) {
         println!("Skipping unsupported file format: {:?}", input_path);
-        return Ok(());  // Skip unsupported file formats
+        return Ok(()); // Skip unsupported file formats
     }
 
     // Try opening and decoding the image file
@@ -75,7 +79,7 @@ fn convert_image(input_path: &Path, output_dir: &Path, target_format: &str) -> R
     // Check if the output file already exists
     if output_path.exists() {
         println!("Output already exists for {:?}; skipping", input_path);
-        return Ok(());  // Skip if the file already exists
+        return Ok(()); // Skip if the file already exists
     }
 
     // Determine the format to save the image
@@ -94,8 +98,11 @@ fn convert_image(input_path: &Path, output_dir: &Path, target_format: &str) -> R
 }
 
 /// Traverses the source directory, processes all image files, and converts them to the specified format.
-fn process_images(source_dir: &Path, output_dir: &Path, target_format: &str) -> Result<(), Box<dyn std::error::Error>> {
-
+fn process_images(
+    source_dir: &Path,
+    output_dir: &Path,
+    target_format: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
     let entries: Vec<_> = fs::read_dir(source_dir)?.collect();
     if entries.is_empty() {
         println!("No images found in the source directory.");
@@ -122,7 +129,7 @@ fn process_images(source_dir: &Path, output_dir: &Path, target_format: &str) -> 
                     } else if ext != target_format {
                         let mut files = files_to_process.lock().unwrap();
                         files.push(path.to_path_buf()); // Add the file to the list of files to process
-                        println!("Found supported image file: {:?}", path);  // Log supported image files
+                        println!("Found supported image file: {:?}", path); // Log supported image files
                     }
                 }
             }
@@ -139,7 +146,7 @@ fn process_images(source_dir: &Path, output_dir: &Path, target_format: &str) -> 
     // Process the image files in parallel using rayon
     files.par_iter().for_each(|file| {
         if let Err(e) = convert_image(file, output_dir, target_format) {
-            eprintln!("Failed to process {:?}: {}", file, e);  // Log any errors
+            eprintln!("Failed to process {:?}: {}", file, e); // Log any errors
         }
     });
 
@@ -227,7 +234,11 @@ fn remove_background(img: &DynamicImage, edge_threshold: u8) -> RgbaImage {
     output
 }
 
-fn remove_bg_from_images(source_dir: &Path, output_dir: &Path, edge_threshold: u8) -> Result<(), Box<dyn std::error::Error>> {
+fn remove_bg_from_images(
+    source_dir: &Path,
+    output_dir: &Path,
+    edge_threshold: u8,
+) -> Result<(), Box<dyn std::error::Error>> {
     if !source_dir.exists() || !source_dir.is_dir() {
         return Err("Source directory does not exist or is not a directory".into());
     }
@@ -240,7 +251,11 @@ fn remove_bg_from_images(source_dir: &Path, output_dir: &Path, edge_threshold: u
 
     files.par_iter().for_each(|input_path| {
         let img_result = ImageReader::open(input_path)
-            .and_then(|reader| reader.decode().map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e)))
+            .and_then(|reader| {
+                reader
+                    .decode()
+                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+            })
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e));
 
         let img = match img_result {
@@ -291,7 +306,7 @@ fn main() {
                     Arg::new("background")
                         .short('b')
                         .long("background")
-                        .action(ArgAction::SetTrue) // Flag without a value
+                        .action(ArgAction::SetTrue)
                         .help("Remove background from images"),
                 )
                 .arg(
@@ -349,63 +364,78 @@ fn main() {
 
     // Handle "remove" command
     if let Some(remove_matches) = matches.subcommand_matches("remove") {
+        // Retrieve the "background" flag value
         let remove_bg = remove_matches.get_flag("background");
+        // Retrieve the source directory from the command line arguments
         let source_dir = Path::new(remove_matches.get_one::<String>("source").unwrap());
+        // Retrieve the output directory from the command line arguments, or default to the source directory
         let output_dir = remove_matches
             .get_one::<String>("output")
             .map(Path::new)
             .unwrap_or(source_dir);
-        let edge_threshold: u8 = *remove_matches.get_one::<u8>("edge-threshold").unwrap_or(&30);
 
+        // Retrieve the edge threshold from the command line arguments, or default to 30
+        let edge_threshold: u8 = *remove_matches
+            .get_one::<u8>("edge-threshold")
+            .unwrap_or(&30);
+
+        // Check if the source directory exists and is a directory
         if !source_dir.exists() || !source_dir.is_dir() {
             eprintln!("Source directory does not exist or is not a directory");
-            std::process::exit(1);
+            std::process::exit(1); // Exit with an error code if the source directory is invalid
         }
 
+        // Create the output directory if it does not exist
         if !output_dir.exists() {
             fs::create_dir_all(output_dir).expect("Failed to create output directory");
         }
 
+        // If the "background" flag is set, remove the background from the images
         if remove_bg {
             if let Err(e) = remove_bg_from_images(source_dir, output_dir, edge_threshold) {
-                eprintln!("Error removing background: {}", e);
+                eprintln!("Error removing background: {}", e); // Log any errors during background removal
             } else {
-                println!("Background removal completed.");
+                println!("Background removal completed."); // Notify the user when background removal is complete
             }
         }
 
-        return;
+        return; // Exit the program after handling the "remove" command
     }
 
     // Handle "convert" command
     if let Some(convert_matches) = matches.subcommand_matches("convert") {
+        // Retrieve the source directory from the command line arguments
         let source_dir = Path::new(convert_matches.get_one::<String>("source").unwrap());
+        // Retrieve the output directory from the command line arguments, or default to the source directory
         let output_dir = convert_matches
             .get_one::<String>("output")
             .map(Path::new)
             .unwrap_or(source_dir);
+        // Retrieve the target format from the command line arguments
         let target_format = convert_matches.get_one::<String>("format").unwrap();
 
+        // Check if the source directory exists and is a directory
         if !source_dir.exists() || !source_dir.is_dir() {
             eprintln!("Source directory does not exist or is not a directory");
-            std::process::exit(1);
+            std::process::exit(1); // Exit with an error code if the source directory is invalid
         }
 
+        // Create the output directory if it does not exist
         if !output_dir.exists() {
             fs::create_dir_all(output_dir).expect("Failed to create output directory");
         }
 
+        // Process the images in the source directory and convert them to the target format
         if let Err(e) = process_images(source_dir, output_dir, target_format) {
-            eprintln!("Error processing images: {}", e);
+            eprintln!("Error processing images: {}", e); // Log any errors during image processing
         } else {
-            println!("Image processing completed.");
+            println!("Image processing completed."); // Notify the user when image processing is complete
         }
 
-        return;
+        return; // Exit the program after handling the "convert" command
     }
 
-
-    // Extract command-line arguments
+    // Extract command-line arguments (for default behavior if no subcommand is provided)
     let source_dir = Path::new(matches.get_one::<String>("source").unwrap());
     let output_dir = matches
         .get_one::<String>("output")
