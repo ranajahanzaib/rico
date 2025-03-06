@@ -120,9 +120,6 @@ fn process_images(
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Mutex is used to safely share the file list among threads.
     // Initialize a Mutex-protected vector to store the paths of files to be processed.
-
-    // Mutex is used to safely share the file list among threads.
-    // Initialize a Mutex-protected vector to store the paths of files to be processed.
     let files_to_process: Mutex<Vec<PathBuf>> = Mutex::new(Vec::new());
 
     // Traverse the source directory recursively using WalkDir.
@@ -334,7 +331,9 @@ fn remove_bg_from_images(
         if let Some(parent) = output_path.parent() {
             if !parent.exists() {
                 // If parent directory does not exist, create it and all necessary parent directories.
-                fs::create_dir_all(parent).expect("Failed to create output subdirectory");
+                fs::create_dir_all(parent).unwrap_or_else(|e| {
+                    eprintln!("Failed to create output subdirectory: {}", e);
+                });
             }
         }
 
@@ -353,73 +352,7 @@ fn remove_bg_from_images(
 }
 
 fn main() {
-    // CLI argument parsing with clap
-    let matches = Command::new("RICO - Rust Image Converter")
-        .version("1.0") // Set the version of the CLI tool.
-        .author("Rana Jahanzaib <work@withrana.com>")
-        .about("RICO is a Rust-powered CLI tool for rapid, parallel image conversion.") // Set a brief description of the CLI tool.
-        .subcommand(
-            Command::new("remove") // Define the "remove" subcommand.
-                .about("Remove background from images") // Set a description for the "remove" subcommand.
-                .arg(
-                    Arg::new("background") // Define the "background" argument.
-                        .short('b') // Set the short flag for the argument.
-                        .long("background") // Set the long flag for the argument.
-                        .action(ArgAction::SetTrue) // Set the action to set the argument to true if present.
-                        .help("Remove background from images"), // Set a help message for the argument.
-                )
-                .arg(
-                    Arg::new("source") // Define the "source" argument.
-                        .short('s') // Set the short flag for the argument.
-                        .long("source") // Set the long flag for the argument.
-                        .value_parser(clap::value_parser!(String)) // Set the value parser to parse the argument as a String.
-                        .required(true) // Make the argument required.
-                        .help("Source directory for input images"), // Set a help message for the argument.
-                )
-                .arg(
-                    Arg::new("output") // Define the "output" argument.
-                        .short('o') // Set the short flag for the argument.
-                        .long("output") // Set the long flag for the argument.
-                        .value_parser(clap::value_parser!(String)) // Set the value parser to parse the argument as a String.
-                        .help("Output directory for processed images (optional, defaults to source directory)"), // Set a help message for the argument.
-                )
-                .arg(
-                    Arg::new("edge-threshold") // Define the "edge-threshold" argument.
-                        .short('e') // Set the short flag for the argument.
-                        .long("edge-threshold") // Set the long flag for the argument.
-                        .value_parser(clap::value_parser!(u8)) // Set the value parser to parse the argument as a u8.
-                        .default_value("30") // Set a default value for the argument.
-                        .help("Set the edge detection threshold (default: 30)"), // Set a help message for the argument.
-                ),
-        )
-        .subcommand(
-            Command::new("convert") // Define the "convert" subcommand.
-                .about("Convert images to different formats") // Set a description for the "convert" subcommand.
-                .arg(
-                    Arg::new("source") // Define the "source" argument.
-                        .short('s') // Set the short flag for the argument.
-                        .long("source") // Set the long flag for the argument.
-                        .value_parser(clap::value_parser!(String)) // Set the value parser to parse the argument as a String.
-                        .required(true) // Make the argument required.
-                        .help("Source directory for input images"), // Set a help message for the argument.
-                )
-                .arg(
-                    Arg::new("output") // Define the "output" argument.
-                        .short('o') // Set the short flag for the argument.
-                        .long("output") // Set the long flag for the argument.
-                        .value_parser(clap::value_parser!(String)) // Set the value parser to parse the argument as a String.
-                        .help("Output directory for converted images (optional, defaults to source directory)"), // Set a help message for the argument.
-                )
-                .arg(
-                    Arg::new("format") // Define the "format" argument.
-                        .short('f') // Set the short flag for the argument.
-                        .long("format") // Set the long flag for the argument.
-                        .value_parser(clap::value_parser!(String)) // Set the value parser to parse the argument as a String.
-                        .default_value("png") // Set a default value for the argument.
-                        .help("Target format for conversion (e.g., png, jpg, bmp, webp)"), // Set a help message for the argument.
-                ),
-        )
-        .get_matches(); // Parse the command-line arguments and get the matches.
+    let matches = parse_args();
 
     // Handle "remove" command
     if let Some(remove_matches) = matches.subcommand_matches("remove") {
@@ -437,7 +370,9 @@ fn main() {
 
         // Get the edge threshold value from the "edge-threshold" argument.
         // If "edge-threshold" is not provided, default to 30.
-        let edge_threshold: u8 = *remove_matches.get_one::<u8>("edge-threshold").unwrap_or(&30);
+        let edge_threshold: u8 = *remove_matches
+            .get_one::<u8>("edge-threshold")
+            .unwrap_or(&30);
 
         // Validate that the source directory exists and the output directory can be created.
         // This ensures that the program can proceed with the file operations.
@@ -519,4 +454,73 @@ fn validate_directories(source_dir: &Path, output_dir: &Path) {
         // If the creation fails, panic with an error message.
         fs::create_dir_all(output_dir).expect("Failed to create output directory");
     }
+}
+
+fn parse_args() -> ArgMatches {
+    Command::new("RICO - Rust Image Converter")
+        .version("1.0")
+        .author("Rana Jahanzaib <work@withrana.com>")
+        .about("RICO is a Rust-powered CLI tool for rapid, parallel image conversion.")
+        .subcommand(
+            Command::new("remove")
+                .about("Remove background from images")
+                .arg(
+                    Arg::new("background")
+                        .short('b')
+                        .long("background")
+                        .action(ArgAction::SetTrue)
+                        .help("Remove background from images"),
+                )
+                .arg(
+                    Arg::new("source")
+                        .short('s')
+                        .long("source")
+                        .value_parser(clap::value_parser!(String))
+                        .required(true)
+                        .help("Source directory for input images"),
+                )
+                .arg(
+                    Arg::new("output")
+                        .short('o')
+                        .long("output")
+                        .value_parser(clap::value_parser!(String))
+                        .help("Output directory for processed images (optional, defaults to source directory)"),
+                )
+                .arg(
+                    Arg::new("edge-threshold")
+                        .short('e')
+                        .long("edge-threshold")
+                        .value_parser(clap::value_parser!(u8))
+                        .default_value("30")
+                        .help("Set the edge detection threshold (default: 30)"),
+                ),
+        )
+        .subcommand(
+            Command::new("convert")
+                .about("Convert images to different formats")
+                .arg(
+                    Arg::new("source")
+                        .short('s')
+                        .long("source")
+                        .value_parser(clap::value_parser!(String))
+                        .required(true)
+                        .help("Source directory for input images"),
+                )
+                .arg(
+                    Arg::new("output")
+                        .short('o')
+                        .long("output")
+                        .value_parser(clap::value_parser!(String))
+                        .help("Output directory for converted images (optional, defaults to source directory)"),
+                )
+                .arg(
+                    Arg::new("format")
+                        .short('f')
+                        .long("format")
+                        .value_parser(clap::value_parser!(String))
+                        .default_value("png")
+                        .help("Target format for conversion (e.g., png, jpg, bmp, webp)"),
+                ),
+        )
+        .get_matches()
 }
