@@ -36,13 +36,16 @@ fn collect_image_files(source_dir: &Path) -> Vec<PathBuf> {
     image_files
 }
 
-/// Converts an image from its current format to a target format (e.g., PNG, JPEG, BMP).
+/// Converts an image from its current format to a target format (e.g., PNG, JPEG, BMP, WEBP).
 /// This function will skip unsupported formats and files that cannot be decoded.
 fn convert_image(
     input_path: &Path,
+    source_dir: &Path,
     output_dir: &Path,
     target_format: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let target_format = target_format.to_lowercase();
+
     // Skip unsupported formats, such as SVG (image::guess_format will return an error for it)
     if let Some(ext) = input_path.extension() {
         let ext = ext.to_str().unwrap_or("").to_lowercase();
@@ -58,36 +61,47 @@ fn convert_image(
     file.read_to_end(&mut buffer)?;
 
     // Guess the format of the image based on its contents.
-    let format = image::guess_format(&buffer)?;
+    let format = match image::guess_format(&buffer) {
+        Ok(fmt) => fmt,
+        Err(_) => {
+            println!("Skipping unsupported file format: {:?}", input_path);
+            return Ok(());
+        }
+    };
 
     // If the format is unsupported, skip the file.
     if !matches!(
         format,
-        ImageFormat::Png | ImageFormat::Jpeg | ImageFormat::Bmp
+        ImageFormat::Png | ImageFormat::Jpeg | ImageFormat::Bmp | ImageFormat::WebP
     ) {
         println!("Skipping unsupported file format: {:?}", input_path);
         return Ok(()); // Skip unsupported file formats
     }
 
-    // Try opening and decoding the image file.
-    let img_result = ImageReader::open(input_path);
-
-    // If the image cannot be decoded, skip the file.
-    let img = match img_result {
-        Ok(reader) => reader.decode(),
+    // Decode the image directly from the buffer using the detected format.
+    let img = match image::load_from_memory_with_format(&buffer, format) {
+        Ok(img) => img,
         Err(_) => {
             println!("Skipping file (could not decode): {:?}", input_path);
             return Ok(());
         }
     };
 
-    // Unwrap the result of image decoding.
-    let img = img?;
+    // Create the output path preserving relative directory structure and dots in file stems.
+    let relative_path = input_path
+        .strip_prefix(source_dir)
+        .ok()
+        .filter(|p| !p.as_os_str().is_empty())
+        .or_else(|| input_path.file_name().map(Path::new))
+        .unwrap_or(input_path);
+    let mut output_path = output_dir.join(relative_path);
+    output_path.set_extension(&target_format);
 
-    // Create the output path by changing the file extension to the target format.
-    let mut output_path = output_dir.to_path_buf();
-    output_path.push(input_path.file_stem().unwrap());
-    output_path.set_extension(target_format);
+    if let Some(parent) = output_path.parent() {
+        if !parent.exists() {
+            fs::create_dir_all(parent)?;
+        }
+    }
 
     // Check if the output file already exists.
     if output_path.exists() {
@@ -96,7 +110,7 @@ fn convert_image(
     }
 
     // Determine the format to save the image based on the target_format string.
-    let format = match target_format {
+    let format = match target_format.as_str() {
         "png" => ImageFormat::Png,
         "jpg" | "jpeg" => ImageFormat::Jpeg,
         "bmp" => ImageFormat::Bmp,
@@ -118,6 +132,7 @@ fn process_images(
     output_dir: &Path,
     target_format: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let target_format = target_format.to_lowercase();
     // Mutex is used to safely share the file list among threads.
     // Initialize a Mutex-protected vector to store the paths of files to be processed.
     let files_to_process: Mutex<Vec<PathBuf>> = Mutex::new(Vec::new());
@@ -163,7 +178,7 @@ fn process_images(
     // Process the image files in parallel using rayon.
     files.par_iter().for_each(|file| {
         // Attempt to convert the image file.
-        if let Err(e) = convert_image(file, output_dir, target_format) {
+        if let Err(e) = convert_image(file, source_dir, output_dir, &target_format) {
             // If an error occurs during conversion, log the error to stderr.
             eprintln!("Failed to process {:?}: {}", file, e);
         }
@@ -232,16 +247,16 @@ fn remove_background(img: &DynamicImage, edge_threshold: u8) -> RgbaImage {
 
             // Check neighboring pixels for strong edges.
             // If any neighboring pixel has a significant color difference (edge), set the flag.
-            if x > 0 && is_edge(*pixel, img.get_pixel(x - 1, y).clone(), edge_threshold) {
+            if x > 0 && is_edge(*pixel, *img.get_pixel(x - 1, y), edge_threshold) {
                 is_surrounded_by_edges = true;
             }
-            if x + 1 < width && is_edge(*pixel, img.get_pixel(x + 1, y).clone(), edge_threshold) {
+            if x + 1 < width && is_edge(*pixel, *img.get_pixel(x + 1, y), edge_threshold) {
                 is_surrounded_by_edges = true;
             }
-            if y > 0 && is_edge(*pixel, img.get_pixel(x, y - 1).clone(), edge_threshold) {
+            if y > 0 && is_edge(*pixel, *img.get_pixel(x, y - 1), edge_threshold) {
                 is_surrounded_by_edges = true;
             }
-            if y + 1 < height && is_edge(*pixel, img.get_pixel(x, y + 1).clone(), edge_threshold) {
+            if y + 1 < height && is_edge(*pixel, *img.get_pixel(x, y + 1), edge_threshold) {
                 is_surrounded_by_edges = true;
             }
 
@@ -296,14 +311,10 @@ fn remove_bg_from_images(
 
     // Process each image file in parallel.
     files.par_iter().for_each(|input_path| {
-        // Attempt to open and decode the image file.
+        // Attempt to open and decode the image file using its guessed content format.
         let img_result = ImageReader::open(input_path)
-            .and_then(|reader| {
-                reader
-                    .decode()
-                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
-            })
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e));
+            .and_then(|reader| reader.with_guessed_format())
+            .and_then(|reader| reader.decode().map_err(std::io::Error::other));
 
         // Handle the result of image decoding.
         let img = match img_result {
@@ -421,9 +432,6 @@ fn main() {
             // If image processing is successful, print a success message to stdout.
             println!("Image processing completed.");
         }
-        // Return from the function after handling the "convert" subcommand.
-        // This ensures that no further subcommands are processed.
-        return;
     }
 }
 
@@ -523,4 +531,106 @@ fn parse_args() -> ArgMatches {
                 ),
         )
         .get_matches()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn create_temp_dir(prefix: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("rico_test_{}_{}", prefix, nanos));
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn test_is_edge_detection() {
+        let white = Rgba([250, 250, 250, 255]);
+        let near_white = Rgba([242, 245, 248, 255]);
+        let dark_subject = Rgba([40, 60, 90, 255]);
+
+        assert!(!is_edge(white, near_white, 30));
+        assert!(is_edge(white, dark_subject, 30));
+    }
+
+    #[test]
+    fn test_remove_background_preserves_enclosed_subject() {
+        let mut img = RgbaImage::from_pixel(10, 10, Rgba([250, 250, 250, 255]));
+        // Draw a dark 4x4 subject in the center (x: 3..7, y: 3..7) with an inner white pixel at (4, 4).
+        for y in 3..7 {
+            for x in 3..7 {
+                img.put_pixel(x, y, Rgba([30, 50, 80, 255]));
+            }
+        }
+        img.put_pixel(4, 4, Rgba([255, 255, 255, 255]));
+
+        let dyn_img = DynamicImage::ImageRgba8(img);
+        let output = remove_background(&dyn_img, 30);
+
+        // Outer border pixel should be transparent.
+        assert_eq!(output.get_pixel(0, 0)[3], 0);
+        assert_eq!(output.get_pixel(1, 1)[3], 0);
+        // Subject pixel and enclosed inner white pixel should remain opaque.
+        assert_eq!(output.get_pixel(3, 3)[3], 255);
+        assert_eq!(output.get_pixel(4, 4)[3], 255);
+    }
+
+    #[test]
+    fn test_convert_webp_and_dotted_filenames_and_subdirectories() {
+        let src = create_temp_dir("convert_src");
+        let out = create_temp_dir("convert_out");
+        let sub = src.join("apple");
+        fs::create_dir_all(&sub).unwrap();
+
+        let img = DynamicImage::ImageRgba8(RgbaImage::from_pixel(4, 4, Rgba([20, 120, 220, 255])));
+
+        // 1. Filename with dots in stem inside a subdirectory
+        let dotted_png = sub.join("apple-ipad-10.2-(2021).png");
+        img.save_with_format(&dotted_png, ImageFormat::Png).unwrap();
+
+        // 2. WebP input image
+        let webp_in = sub.join("sample.webp");
+        img.save_with_format(&webp_in, ImageFormat::WebP).unwrap();
+
+        // 3. Mismatched extension (PNG bytes with .jpg extension)
+        let mismatched_jpg = sub.join("mismatched.jpg");
+        img.save_with_format(&mismatched_jpg, ImageFormat::Png)
+            .unwrap();
+
+        process_images(&src, &out, "webp").unwrap();
+        assert!(out.join("apple/apple-ipad-10.2-(2021).webp").exists());
+        assert!(out.join("apple/mismatched.webp").exists());
+
+        // Also test converting WebP input to PNG
+        let out_png = create_temp_dir("convert_out_png");
+        process_images(&src, &out_png, "PNG").unwrap();
+        assert!(out_png.join("apple/sample.png").exists());
+
+        let _ = fs::remove_dir_all(&src);
+        let _ = fs::remove_dir_all(&out);
+        let _ = fs::remove_dir_all(&out_png);
+    }
+
+    #[test]
+    fn test_remove_bg_from_images_handles_mismatched_extension() {
+        let src = create_temp_dir("remove_src");
+        let out = create_temp_dir("remove_out");
+
+        let img = DynamicImage::ImageRgba8(RgbaImage::from_pixel(6, 6, Rgba([250, 250, 250, 255])));
+        // Save as PNG bytes with a .jpg extension
+        let mismatched = src.join("device.jpg");
+        img.save_with_format(&mismatched, ImageFormat::Png).unwrap();
+
+        remove_bg_from_images(&src, &out, 30).unwrap();
+        let processed_path = out.join("device.png");
+        assert!(processed_path.exists());
+
+        let _ = fs::remove_dir_all(&src);
+        let _ = fs::remove_dir_all(&out);
+    }
 }
