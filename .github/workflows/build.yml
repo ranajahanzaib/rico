@@ -11,7 +11,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Set up Rust
         uses: actions-rs/toolchain@v1
@@ -19,7 +19,7 @@ jobs:
           toolchain: 1.80
 
       - name: Cache Cargo registry
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         with:
           path: ~/.cargo
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
@@ -30,7 +30,7 @@ jobs:
         run: cargo build --release
 
       - name: Upload release binary
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: rico-release
           path: target/release/rico
